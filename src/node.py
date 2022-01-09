@@ -80,6 +80,23 @@ class Node:
         pass
 
     def _process_request(self, request):
+        # 1. Request types - LEADER_ELECT, DATA_EX, ..., EX_CLOCK
+        # self.network.host - Gives the host address of the node.
+        # We can use ip-address to generate IDs for each node.
+        # Sum is not a good heuristic, 1.1.1.1 and 2.2.0.0 has sum 4.
+        # One option is to remove the dots, 1.1.1.1 = 1111. Unique.
+        
+        if request.header == 'LEADER_ELECT':
+            # leader election.
+            pass
+        elif request.header == 'DATA_EX':
+            pass
+
+        # server - 8080 udp, tcp
+        # client - client - random port
+        pass
+
+    def leader_election():
         pass
 
     def _attempt_fault_with_probability(self, prob):

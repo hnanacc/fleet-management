@@ -11,6 +11,8 @@ from src.middlewares.data_source import DataSource
 def main():
     host, port = input('Enter the (host:port): ').strip().split(':')
     print(host, port)
+
+    
     node = Node(
         Network((host, int(port))),
         FollowerStrategies(),
