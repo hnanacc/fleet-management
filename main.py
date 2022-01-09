@@ -1,24 +1,32 @@
-from .node import Node
-from .middlewares.network import Network
-from .middlewares.logger import Logger
-from .strategies.follower import FollowerStrategies
-from .strategies.leader import LeaderStrategies
-from .strategies.candidate import CandidateStrategies
-from .remote_node import Remote
+from src.node import Node
+from src.middlewares.network import Network
+from src.middlewares.logger import Logger
+from src.strategies.fault import FaultStrategies
+from src.strategies.follower import FollowerStrategies
+from src.strategies.leader import LeaderStrategies
+from src.strategies.candidate import CandidateStrategies
+from src.middlewares.remote import Remote
+from src.middlewares.data_source import DataSource
 
 def main():
+    host, port = input('Enter the (host:port): ').strip().split(':')
+    print(host, port)
     node = Node(
-        Network(),
+        Network((host, int(port))),
         FollowerStrategies(),
         LeaderStrategies(),
         CandidateStrategies(),
-        Remote()
+        FaultStrategies(),
+        Remote(),
+        DataSource()
     )
 
-    try:
-        node.run()
-    except Exception:
-        Logger.log("Something happened!")
+    node.run()
+
+    # try:
+    #     node.run()
+    # except Exception:
+    #     Logger.log("Something happened!")
 
 if __name__ == '__main__':
     main()

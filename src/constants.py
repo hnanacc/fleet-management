@@ -4,3 +4,4 @@ class Roles(Enum):
     FOLLOWER = 'follower'
     LEADER = 'leader'
     CANDIDATE = 'candidate'
+
