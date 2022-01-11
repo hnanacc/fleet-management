@@ -1,6 +1,8 @@
 import time
 import random
 from .constants import Roles
+import socket
+import json
 
 class Node:
     """Docstring
@@ -88,6 +90,8 @@ class Node:
         
         if request.header == 'LEADER_ELECT':
             # leader election.
+            ip=self.network.host
+            self.leader_election(self)
             pass
         elif request.header == 'DATA_EX':
             pass
@@ -96,8 +100,68 @@ class Node:
         # client - client - random port
         pass
 
-    def leader_election():
+    def leader_election(self):
+        my_uid = self.network.host #discard all dot between ip 
+        ring_port =4040
+        leader_uid=''
+        participant = False
+        members=self.network.get_peers()
+        
+        ring = self.form_ring(members)
+        neighbor = self.get_neightbor(ring, my_uid, 'left')
+        
+        ring_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        ring_socket.bind((self.network.host,ring_port)) #use original ip for connection
+        print(f'Node is running at{my_uid}:{ring_port}')
+
+        print ('\n Waiting to receive election message... \n')
+        data,address = ring_socket.recv(4096)
+        election_message = json.loads(data.decode())
+
+        if election_message['isLeader']:
+            leader_uid = election_message['mid']
+            participant = False
+            ring_socket.sendto(json.dumps(election_message),neighbor)
+
+        if election_message['mid']< my_uid and not participant:
+            new_election_message = { 
+            'mid':my_uid, 
+            'isLeader': False }
+            participant = True
+            ring_socket.sendto(json.dumps(new_election_message),neighbor)
+        elif election_message['mid'] > my_uid:
+            participant =True
+            ring_socket.sendto(json.dumps(election_message),neighbor)
+        elif election_message['mid'] == my_uid:
+            leader_uid =my_uid
+            new_election_message = {
+                'mid':my_uid,
+                'isLeader': True
+            }
+            participant = False
+            ring_socket.sendto(json.dumps(new_election_message),neighbor)
         pass
+
+    def form_ring(members):
+        sorted_binary_ring = sorted([socket.inet_aton(member) for member in members])
+        sorted_ip_ring = [socket.inet_ntoa(node) for node in sorted_binary_ring]
+        return sorted_ip_ring
+
+    def get_neighbor(ring,current_node_ip,direction = 'left'):
+        current_node_index = ring.index(current_node_ip) if current_node_ip in ring else -1
+        if current_node_index != -1:
+            if direction == 'left':
+                if current_node_index + 1 == len(ring):
+                    return ring[0]
+                else:
+                    return ring[current_node_index +1]
+            else:
+                if current_node_index == 0:
+                    return ring[len(ring)-1]
+                else:
+                    return ring[current_node_index -1]
+        else:
+            return None
 
     def _attempt_fault_with_probability(self, prob):
         if random.random() < prob:
