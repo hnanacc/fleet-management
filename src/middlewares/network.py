@@ -1,14 +1,15 @@
 from threading import Thread
-from collections import deque
+from collections import defaultdict, deque
 from socket import socket, AF_INET, SOCK_STREAM, SOCK_DGRAM
 from socketserver import ThreadingUDPServer, ThreadingTCPServer, BaseRequestHandler
 
 class Request:
-    def __init__(self, data, client_address):
-        self.raw = data
+    def __init__(self, message, client_address):
+        self.raw = message
         self.client_address = client_address
-        self.header = str(data[:32], 'utf-8')
-        self.message = str(data[32:], 'utf-8')
+        self.header = str(message[:32], 'utf-8')
+        self.content = str(message[32:], 'utf-8')
+        self.seq = 42
 
 class Network:
 
@@ -16,7 +17,9 @@ class Network:
     """
 
     peers = []
-    msg_queue = deque()
+    request_queue = deque()
+    hold_back_queue = defaultdict(list)
+    last_seq = dict()
     is_connected = False
 
     def __init__(self, address):
@@ -29,9 +32,17 @@ class Network:
             sock.connect(address)
             sock.sendall(bytes(msg, 'utf-8'))
             
-    def multicast(self, msg, addresses):
-        for address in addresses:
-            self.unicast(msg, address)
+    def multicast(self, msg, group_id, leader_address):
+        # send a request to the leader with MULTICAST header.
+        # Looking for total ordering. BC only that makes sense.
+        formatted_msg = f'MULTICAST {group_id} {msg}'
+        self.unicast(formatted_msg, leader_address)
+
+    def ip_multicast(self, msg, group_address):
+        # do some message formatting.
+        with socket(AF_INET, SOCK_DGRAM) as sock:
+            sock.sendto(bytes(msg, 'utf-8'), group_address)
+        pass
 
     def broadcast(self, msg, address):
         with socket(AF_INET, SOCK_DGRAM) as sock:
@@ -46,13 +57,32 @@ class Network:
 
         class RequestHandler(BaseRequestHandler):
             def handle(this):
-                message = None
                 if this.server.socket_type is SOCK_DGRAM:
-                    message = this.request[0].strip()
+                    request = Request(this.request[0].strip(), this.client_address)
+                    if request.header.endswith('BROADCAST'):
+                        self.request_queue.append(request)
+                    else:
+                        if request.seq == self.last_seq[this.client_address] + 1:
+                            self.request_queue.append(request)
+                            self.last_seq[this.client_address] += 1
+                            # handle hold back queue.
+                            req_list = sorted(self.hold_back_queue[this.client_address],
+                                                        key=lambda x: x.seq)
+                            self.hold_back_queue[this.client_address].clear()
+                            for req in req_list:
+                                if req.seq == self.last_seq[this.client_address] + 1:
+                                    self.request_queue.append(req)
+                                    self.last_seq[this.client_address] += 1
+                                else:
+                                    self.hold_back_queue[this.client_address].append(req)
+
+                        else:
+                            self.hold_back_queue[this.client_address].append(request)
+                            negative_ack = 'MULTICAST MISSING' + self.last_seq[this.client_address] + 1
+                            self.unicast(negative_ack, this.client_address)
                 else:
-                    message = this.request.recv(4096)
-                
-                self.msg_queue.append(Request(message, this.client_address))
+                    request = Request(this.request.recv(4096), this.client_address)
+                    self.request_queue.append(request)
 
         self.tcp_server = ThreadingTCPServer(self.address, RequestHandler)
         self.udp_server = ThreadingUDPServer(self.address, RequestHandler)
