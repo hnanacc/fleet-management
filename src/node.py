@@ -3,7 +3,6 @@ import random
 from .constants import Roles
 import socket
 import json
-from middlewares.network import Network
 
 class Node:
     """Docstring
@@ -102,6 +101,8 @@ class Node:
         pass
 
     def leader_election(self):
+        '''Overall we need to integrate things properly.
+        '''
         my_uid = self.network.host  #discard all dot between ip 
         #ring_port =4040
         leader_uid=''
@@ -113,17 +114,17 @@ class Node:
         
         #ring_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         #ring_socket.bind((self.network.host,ring_port)) #use original ip for connection
-        print(f'Node is running at{my_uid}:{ring_port}')
+        print(f'Node is running at{my_uid}:{ring_port}') # where do we get ring_port var?
 
         print ('\n Waiting to receive election message... \n')
-        data,address = ring_socket.recv(4096)
+        data,address = ring_socket.recv(4096) # this should be under self.network
         election_message = json.loads(data.decode())
 
-        if election_message['isLeader']:
+        if election_message['isLeader']: # check out the Request class in Network. Use those apis.
             leader_uid = election_message['mid']
             participant = False
             #ring_socket.sendto(json.dumps(election_message),neighbor)
-            Network.unicast(json.dumps(election_message),neighbor)
+            self.network.unicast(json.dumps(election_message),neighbor) # Is neighbor a array? unicast take single address only.
 
         if election_message['mid']< my_uid and not participant:
             new_election_message = { 
@@ -131,11 +132,11 @@ class Node:
             'isLeader': False }
             participant = True
             #ring_socket.sendto(json.dumps(new_election_message),neighbor)
-            Network.unicast(json.dumps(new_election_message),neighbor)
+            self.network.unicast(json.dumps(new_election_message),neighbor)
         elif election_message['mid'] > my_uid:
             participant =True
             #ring_socket.sendto(json.dumps(election_message),neighbor)
-            Network.unicast(json.dumps(election_message),neighbor)
+            self.network.unicast(json.dumps(election_message),neighbor)
         elif election_message['mid'] == my_uid:
             leader_uid =my_uid
             new_election_message = {
@@ -144,15 +145,18 @@ class Node:
             }
             participant = False
             #ring_socket.sendto(json.dumps(new_election_message),neighbor)
-            Network.unicast(json.dumps(new_election_message),neighbor)
-        pass
+            self.network.unicast(json.dumps(new_election_message),neighbor)
 
     def form_ring(members):
+        #TODO: Things that require sockets can be moved to self.network.
+        # try self.network.form_ring
         sorted_binary_ring = sorted([socket.inet_aton(member) for member in members])
         sorted_ip_ring = [socket.inet_ntoa(node) for node in sorted_binary_ring]
         return sorted_ip_ring
 
     def get_neighbor(ring,current_node_ip,direction):
+        #TODO: Things that require sockets can be moved to self.network.
+        # try self.network.get_neighbors
         current_node_index = ring.index(current_node_ip) if current_node_ip in ring else -1
         if current_node_index != -1:
             if direction == 'left':
