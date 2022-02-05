@@ -1,3 +1,5 @@
+from ..constants import Headers
+
 class LeaderStrategies:
     global_seq = 0
     def remote_sync(self):
@@ -7,7 +9,5 @@ class LeaderStrategies:
         pass
 
     def process_request(self, request, network):
-        if request.header == 'MULTICAST_REQ':
-            # format the message here.
-            message, group_address = request.content, request.group_address
-            network.ip_multicast(message, group_address)
+        if request.header == Headers.DATA_EXCHANGE:
+            pass

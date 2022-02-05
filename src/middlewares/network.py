@@ -24,7 +24,6 @@ class Message:
         return json.dumps({
             'header': self.header,
             'data': self.data,
-            'client_address': self.address,
             'clock': self.clock
         })
 
@@ -48,6 +47,8 @@ class Network:
 
     def unicast(self, msg, address):
         self.clock += 1
+        self.rebuild_message(msg)
+
         with socket(AF_INET, SOCK_STREAM) as sock:
             sock.connect(address)
             sock.sendall(bytes(msg, 'utf-8'))
@@ -56,6 +57,7 @@ class Network:
         # send a request to the leader with MULTICAST header.
         # Looking for total ordering. BC only that makes sense.
         self.clock += 1
+        self.rebuild_message(msg)
         self.unicast(msg.get_message(), msg.address)
 
     def ip_multicast(self, msg, group_address):
@@ -64,10 +66,16 @@ class Network:
             sock.sendto(bytes(msg, 'utf-8'), group_address)
         pass
 
-    def broadcast(self, msg, address):
+    def broadcast(self, msg):
         self.clock += 1
+        msg = self.rebuild_message(msg)
+
         with socket(AF_INET, SOCK_DGRAM) as sock:
-            sock.sendto(bytes(msg, 'utf-8'), address)
+            sock.sendto(bytes(msg, 'utf-8'), msg.address)
+
+    def rebuild_message(self, msg):
+        msg.clock = self.clock
+        msg.some = ''
 
     def _establish_connection(self):
         self.is_connected = True
@@ -116,9 +124,15 @@ class Network:
 
     def get_request(self):
         if self.request_queue:
+            self.clock += 1
             return self.request_queue.popleft()
         else:
             return None
+
+    def get_neighbor(self):
+        ring = sorted(self.peers, key=lambda x: x.uid)
+        return ring[ring.index(self.uid) - 1]
+        
         
     def disconnect(self):
         self.tcp_server.shutdown()
