@@ -1,7 +1,7 @@
 import time
 import random
 from .constants import Roles, Headers
-from middlewares.network import Message
+from .middlewares.network import Message
 
 class Node:
     """Docstring
@@ -16,11 +16,10 @@ class Node:
     uid = None
     ring = None
 
-    leader_strategies, follower_strategies = None, None
+    leader_strategies = None
 
     def __init__(self,
                  network,
-                 follower_strategies, 
                  leader_strategies, 
                  fault_strategies,
                  remote,
@@ -28,11 +27,10 @@ class Node:
                 ):
         self.network = network
         self.leader_strategies = leader_strategies
-        self.follower_strategies = follower_strategies
         self.fault_strategies = fault_strategies
         self.remote = remote
         self.data_source = data_source
-        self.uid = int(self.network.host.split('.').join())
+        self.uid = int(''.join(self.network.host.split('.')))
 
     def run(self):
         """Docstring
@@ -48,10 +46,7 @@ class Node:
         self.perform_role()
 
     def announce_presence(self):
-        message = Message({
-            'header': Headers.PRESENCE_BROADCAST,
-            'data': ''
-        })
+        message = Message(Headers.PRESENCE_ACK, '', '')
         self.network.broadcast(message)
     
     def perform_role(self):
@@ -70,17 +65,10 @@ class Node:
             if request is not None:
                 print(request.raw, request.client_address)
 
-            self._process_request(request) # generic.
+            self.process_request(request) # generic.
 
-            if self.role == Roles.FOLLOWER:
-                self.follower_strategies.process_request(request, self.network)
-
-            
-            elif self.role == Roles.LEADER:
-                self.leader_strategies.process_request(request, self.network)
-
+            if self.role == Roles.LEADER:
                 self.leader_strategies.remote_sync()
-                self.leader_strategies.update_network()
 
             else:
                 raise Exception(f"Unknown role {self.role}")
@@ -89,96 +77,86 @@ class Node:
         print(f'Got a new state {new_state} at {key}')
         pass
 
-    def _process_request(self, request):
-        # 1. Request types - LEADER_ELECT, DATA_EX, ..., EX_CLOCK
-        # self.network.host - Gives the host address of the node.
-        # We can use ip-address to generate IDs for each node.
-        # Sum is not a good heuristic, 1.1.1.1 and 2.2.0.0 has sum 4.
-        # One option is to remove the dots, 1.1.1.1 = 1111. Unique.
+    def process_request(self, request):
+        
         if request is None:
             return
         
         if request.header == Headers.LEADER_ELECTION:
-            self.ring=self.network.get_ring()
-            neighbor = self.get_neighbor(self.ring, self.my_uid, 'left')
-            self.leader_election(self,request,neighbor)
+            self.resolve_election(self, request)
 
         elif request.header == Headers.DATA_EXCHANGE:
-            # some code.
-
-        elif request.header == Headers.GROUP_UPDATE:
-            pass
+            if self.role != Roles.LEADER:
+                return
+            
+            self.update_state(request.data)
 
         elif request.header == Headers.MULTICAST_ONBEHALF:
-            pass
+            request.data.global_id = self.global_counter
+            new_message = Message(Headers.GROUP_UPDATE, request.data, request.mc_address)
+            self.network.multicast(new_message)
+            self.global_counter += 1 # total order
+
+        elif request.header == Headers.GROUP_UPDATE:
+            # TODO: What is the update_state function.
+            self.update_state(request.data)
 
         elif request.header == Headers.PRESENCE_ACK:
             pass
 
         elif request.header == Headers.PRESENCE_BROADCAST:
-            pass
+            self.unicast(Message(Headers.PRESENCE_ACK, '', request.client_address))
 
         else:
             print(f'Request with invalid header: {request.header} received!')
 
     def initiate_election(self):
-        self.network.broadcast('election')
-
-    def resolve_election(self, election_message):  
         neighbor = self.network.get_neighbor()
+        message = Message(Headers.LEADER_ELECTION, self.uid, neighbor)
+        self.network.unicast(message)
 
-        if self.role == Roles.LEADER:
-            pass
-        else:
-            election_message = Message()
+    def resolve_election(self, request):  
+        neighbor = self.network.get_neighbor()
+        new_message = Message(Headers.LEADER_ELECTION, '', neighbor)
+        pb_uid = int(request.data)
 
-            if mid < uid:
-                election_message.uid = self.uid 
-                self.unicast(election_message,neighbor)
-            if(mid>uid):
-                election_message
-            pass
-
-        if election_message['isLeader']:
-            self.leader_uid = election_message['uid']
+        if request.isLeader:
+            self.leader_uid = pb_uid 
             self.participant = False
-            self.network.unicast(election_message, neighbor)
+            self.network.unicast(new_message)
 
-        elif election_message['uid'] < self.uid and not self.participant:
-            new_message = Message({
-                'isLeader': False
-            })
-            new_election_message = { 
-            'mid':self.uid, 
-            'isLeader': False }
+        if pb_uid < self.uid and not self.participant:
+            new_message.data = self.uid
+            new_message.isLeader = False
             self.participant = True
-            self.network.unicast(new_election_message,neighbor)
 
-        elif election_message['mid'] > self.uid:
-            self.participant =True
-            #ring_socket.sendto(json.dumps(election_message),neighbor)
-            self.network.unicast(election_message,neighbor)
-        elif election_message['mid'] == self.uid:
-            self.leader_uid =self.uid
-            new_election_message = {
-                'mid':self.uid,
-                'isLeader': True
-            }
-            self.participant = False
+            self.network.unicast(new_message)
+
+        elif pb_uid > self.uid:
+            self.participant = True
+            self.network.unicast(new_message)
+        
+        elif pb_uid == self.uid:
+            self.leader_uid = self.uid
             self.role = Roles.LEADER
-            #ring_socket.sendto(json.dumps(new_election_message),neighbor)
-            self.network.unicast(new_election_message,neighbor)
-        pass
+            
+            new_message.data = self.uid
+            new_message.isLeader = True
+            self.participant = False
+
+            self.network.unicast(new_message)
 
     def initiate_election(self, neighbor):
         self.participant = True
 
-        election_message = {
-            'mid':self.uid,
-            'isLeader': False
-        }
+        msg = Message(
+            Headers.LEADER_ELECTION,
+            self.uid,
+            neighbor
+        )
 
-        self.network.unicast(election_message, neighbor)
+        msg.isLeader = False
+        self.network.unicast(msg)
 
     def _attempt_fault_with_probability(self, prob):
         if random.random() < prob:

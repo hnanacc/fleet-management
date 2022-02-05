@@ -7,12 +7,10 @@ import json
 
 
 class Request:
-    def __init__(self, message, client_address):
-        self.raw = message
-        self.client_address = client_address
-        self.header = str(message[:32], 'utf-8')
-        self.content = str(message[32:], 'utf-8')
-        self.seq = 42
+    def __init__(self, message):
+        message = json.loads(message)
+        for key in message.keys():
+            self[key] = message[key]
 
 class Message:
     def __init__(self, header, data, address):
@@ -44,16 +42,17 @@ class Network:
         print(f'Assigned address {address[0]}:{address[1]}!')
         self._establish_connection()
         self._start_servers()
+        self.host = self.address[0]
 
-    def unicast(self, msg, address):
+    def unicast(self, msg):
         self.clock += 1
         self.rebuild_message(msg)
 
         with socket(AF_INET, SOCK_STREAM) as sock:
-            sock.connect(address)
-            sock.sendall(bytes(msg, 'utf-8'))
+            sock.connect(msg.address)
+            sock.sendall(bytes(msg.get_message(), 'utf-8'))
             
-    def multicast(self, msg, group_id, leader_address):
+    def multicast(self, msg):
         # send a request to the leader with MULTICAST header.
         # Looking for total ordering. BC only that makes sense.
         self.clock += 1
@@ -63,19 +62,23 @@ class Network:
     def ip_multicast(self, msg, group_address):
         # do some message formatting.
         with socket(AF_INET, SOCK_DGRAM) as sock:
-            sock.sendto(bytes(msg, 'utf-8'), group_address)
+            sock.sendto(bytes(msg.get_message(), 'utf-8'), group_address)
         pass
 
     def broadcast(self, msg):
         self.clock += 1
         msg = self.rebuild_message(msg)
 
+        broken_ip = self.address[0].split('.')
+        address = broken_ip[0] + broken_ip[1] + '.0.0'
+
         with socket(AF_INET, SOCK_DGRAM) as sock:
-            sock.sendto(bytes(msg, 'utf-8'), msg.address)
+            sock.sendto(bytes(msg.get_message(), 'utf-8'), (address, PORT))
 
     def rebuild_message(self, msg):
         msg.clock = self.clock
         msg.some = ''
+        return msg
 
     def _establish_connection(self):
         self.is_connected = True

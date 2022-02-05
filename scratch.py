@@ -1,4 +1,8 @@
-l = [0, 1, 2, 3, 4]
+from enum import Enum
+import json
 
-print(l[-1])
+class Some(str, Enum):
+    Role = 'role'
+
+print(json.dumps(Some.Role))
 

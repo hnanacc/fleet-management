@@ -1,11 +1,11 @@
 from enum import Enum
 
-class Roles(Enum):
+class Roles(str, Enum):
     FOLLOWER = 'follower'
     LEADER = 'leader'
 
 
-class Headers(Enum):
+class Headers(str, Enum):
     PRESENCE_ACK = 'PRESENCE_ACK'               # Response after presence broadcast.
     LEADER_ELECTION = 'LEADER_ELECTION'         # For everything related to election.
     DATA_EXCHANGE = 'DATA_EXCHANGE'             # For sharing state with leader.

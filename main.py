@@ -2,7 +2,6 @@ from src.node import Node
 from src.middlewares.network import Network
 from src.middlewares.logger import Logger
 from src.strategies.fault import FaultStrategies
-from src.strategies.follower import FollowerStrategies
 from src.strategies.leader import LeaderStrategies
 from src.middlewares.remote import Remote
 from src.middlewares.data_source import DataSource
@@ -12,7 +11,6 @@ def main():
     
     node = Node(
         Network(),
-        FollowerStrategies(),
         LeaderStrategies(),
         FaultStrategies(),
         Remote(),
