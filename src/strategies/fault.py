@@ -5,7 +5,7 @@ class FaultStrategies:
 
     def __init__(self):
         self._options = [fn for fn in self.__dir__() if fn.startswith('_fail')]
-        print(self._options)
+        # print(self._options)
 
     def execute_random_fault(self):
         choice = random.choice(self._options)

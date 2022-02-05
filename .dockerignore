@@ -1,0 +1,8 @@
+*.md
+.gitignore
+LICENSE
+
+__pycache__
+
+# user-defined
+scratch.py

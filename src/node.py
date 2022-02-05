@@ -1,6 +1,6 @@
 import time
 import random
-from .constants import Roles
+from .constants import Roles, Headers
 
 class Node:
     """Docstring
@@ -15,13 +15,12 @@ class Node:
     my_uid=None
     ring = None
 
-    leader_strategies, follower_strategies, candidate_strategies = None, None, None
+    leader_strategies, follower_strategies = None, None
 
     def __init__(self,
                  network,
                  follower_strategies, 
                  leader_strategies, 
-                 candidate_strategies,
                  fault_strategies,
                  remote,
                  data_source
@@ -29,7 +28,6 @@ class Node:
         self.network = network
         self.leader_strategies = leader_strategies
         self.follower_strategies = follower_strategies
-        self.candidate_strategies = candidate_strategies
         self.fault_strategies = fault_strategies
         self.remote = remote
         self.data_source = data_source
@@ -89,20 +87,33 @@ class Node:
         # We can use ip-address to generate IDs for each node.
         # Sum is not a good heuristic, 1.1.1.1 and 2.2.0.0 has sum 4.
         # One option is to remove the dots, 1.1.1.1 = 1111. Unique.
+        if request is None:
+            return
         
-        if request.header == 'LEADER_ELECT':
-            # leader election.
+        if request.header == Headers.LEADER_ELECTION:
             self.my_uid = self.network.host  
             self.ring=self.network.get_ring()
             neighbor = self.get_neighbor(self.ring, self.my_uid, 'left')
             self.leader_election(self,request,neighbor)
-            pass
-        elif request.header == 'DATA_EX':
+
+        elif request.header == Headers.DATA_EXCHANGE:
             pass
 
-        # server - 8080 udp, tcp
-        # client - client - random port
-        pass
+        elif request.header == Headers.GROUP_UPDATE:
+            pass
+
+        elif request.header == Headers.MULTICAST_ONBEHALF:
+            pass
+
+        elif request.header == Headers.PRESENCE_ACK:
+            pass
+
+        elif request.header == Headers.PRESENCE_BROADCAST:
+            pass
+
+        else:
+            print(f'Request with invalid header: {request.header} received!')
+
 
     def leader_election(self,data,neighbor):  
         

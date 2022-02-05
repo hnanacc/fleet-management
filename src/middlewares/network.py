@@ -1,7 +1,6 @@
-from this import d
 from threading import Thread
 from collections import defaultdict, deque
-from socket import socket, AF_INET, SOCK_STREAM, SOCK_DGRAM
+from socket import socket, gethostbyname, gethostname, AF_INET, SOCK_STREAM, SOCK_DGRAM
 from socketserver import ThreadingUDPServer, ThreadingTCPServer, BaseRequestHandler
 from ..constants import PORT, Headers
 import json
@@ -41,7 +40,7 @@ class Network:
     is_connected = False
     clock = 0
 
-    def __init__(self, address=(socket.gethostbyname(socket.gethostname()), PORT)):
+    def __init__(self, address=(gethostbyname(gethostname()), PORT)):
         self.address = address
         print(f'Assigned address {address[0]}:{address[1]}!')
         self._establish_connection()
