@@ -9,12 +9,10 @@ from src.middlewares.remote import Remote
 from src.middlewares.data_source import DataSource
 
 def main():
-    host, port = input('Enter the (host:port): ').strip().split(':')
-    print(host, port)
-
+    # host, port = input('Enter the (host:port): ').strip().split(':')
     
     node = Node(
-        Network((host, int(port))),
+        Network(),
         FollowerStrategies(),
         LeaderStrategies(),
         CandidateStrategies(),

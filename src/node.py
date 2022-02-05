@@ -80,7 +80,7 @@ class Node:
                 raise Exception(f"Unknown role {self.role}")
 
     def update_state(self, key, new_state):
-        # print(f'Got a new state {new_state} at {key}')
+        print(f'Got a new state {new_state} at {key}')
         pass
 
     def _process_request(self, request):

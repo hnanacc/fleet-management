@@ -1,7 +1,11 @@
+from this import d
 from threading import Thread
 from collections import defaultdict, deque
 from socket import socket, AF_INET, SOCK_STREAM, SOCK_DGRAM
 from socketserver import ThreadingUDPServer, ThreadingTCPServer, BaseRequestHandler
+from ..constants import PORT, Headers
+import json
+
 
 class Request:
     def __init__(self, message, client_address):
@@ -10,6 +14,20 @@ class Request:
         self.header = str(message[:32], 'utf-8')
         self.content = str(message[32:], 'utf-8')
         self.seq = 42
+
+class Message:
+    def __init__(self, header, data, address):
+        self.header = header
+        self.data = data
+        self.address = address
+    
+    def get_message(self):
+        return json.dumps({
+            'header': self.header,
+            'data': self.data,
+            'client_address': self.address,
+            'clock': self.clock
+        })
 
 class Network:
 
@@ -21,13 +39,16 @@ class Network:
     hold_back_queue = defaultdict(list)
     last_seq = dict()
     is_connected = False
+    clock = 0
 
-    def __init__(self, address):
+    def __init__(self, address=(socket.gethostbyname(socket.gethostname()), PORT)):
         self.address = address
+        print(f'Assigned address {address[0]}:{address[1]}!')
         self._establish_connection()
         self._start_servers()
 
     def unicast(self, msg, address):
+        self.clock += 1
         with socket(AF_INET, SOCK_STREAM) as sock:
             sock.connect(address)
             sock.sendall(bytes(msg, 'utf-8'))
@@ -35,8 +56,8 @@ class Network:
     def multicast(self, msg, group_id, leader_address):
         # send a request to the leader with MULTICAST header.
         # Looking for total ordering. BC only that makes sense.
-        formatted_msg = f'MULTICAST {group_id} {msg}'
-        self.unicast(formatted_msg, leader_address)
+        self.clock += 1
+        self.unicast(msg.get_message(), msg.address)
 
     def ip_multicast(self, msg, group_address):
         # do some message formatting.
@@ -45,6 +66,7 @@ class Network:
         pass
 
     def broadcast(self, msg, address):
+        self.clock += 1
         with socket(AF_INET, SOCK_DGRAM) as sock:
             sock.sendto(bytes(msg, 'utf-8'), address)
 
@@ -94,8 +116,8 @@ class Network:
         print(f'UDP server running at {str(self.udp_server.socket)}')
 
     def get_request(self):
-        if self.msg_queue:
-            return self.msg_queue.popleft()
+        if self.request_queue:
+            return self.request_queue.popleft()
         else:
             return None
         
