@@ -40,7 +40,7 @@ class Node:
         self.announce_presence()
 
         # Start election.
-        self.leader_election()
+        self.initiate_election()
 
         # Depends on the {role} varialbe.
         self.perform_role()
@@ -70,8 +70,6 @@ class Node:
             if self.role == Roles.LEADER:
                 self.leader_strategies.remote_sync()
 
-            else:
-                raise Exception(f"Unknown role {self.role}")
 
     def update_state(self, key, new_state):
         print(f'Got a new state {new_state} at {key}')
@@ -146,17 +144,6 @@ class Node:
 
             self.network.unicast(new_message)
 
-    def initiate_election(self, neighbor):
-        self.participant = True
-
-        msg = Message(
-            Headers.LEADER_ELECTION,
-            self.uid,
-            neighbor
-        )
-
-        msg.isLeader = False
-        self.network.unicast(msg)
 
     def _attempt_fault_with_probability(self, prob):
         if random.random() < prob:

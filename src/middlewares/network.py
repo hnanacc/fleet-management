@@ -43,21 +43,24 @@ class Network:
         self._establish_connection()
         self._start_servers()
         self.host = self.address[0]
+        self.uid = ''.join(self.host.split('.'))
 
     def unicast(self, msg):
         self.clock += 1
         self.rebuild_message(msg)
-
-        with socket(AF_INET, SOCK_STREAM) as sock:
-            sock.connect(msg.address)
-            sock.sendall(bytes(msg.get_message(), 'utf-8'))
+        try:
+            with socket(AF_INET, SOCK_STREAM) as sock:
+                sock.connect((msg.address, PORT))
+                sock.sendall(bytes(msg.get_message(), 'utf-8'))
+        except Exception:
+            pass
             
     def multicast(self, msg):
         # send a request to the leader with MULTICAST header.
         # Looking for total ordering. BC only that makes sense.
         self.clock += 1
         self.rebuild_message(msg)
-        self.unicast(msg.get_message(), msg.address)
+        self.unicast(msg.get_message(), (msg.address, PORT))
 
     def ip_multicast(self, msg, group_address):
         # do some message formatting.
@@ -70,7 +73,7 @@ class Network:
         msg = self.rebuild_message(msg)
 
         broken_ip = self.address[0].split('.')
-        address = broken_ip[0] + broken_ip[1] + '.0.0'
+        address = broken_ip[0] + broken_ip[1] + '.255.255'
 
         with socket(AF_INET, SOCK_DGRAM) as sock:
             sock.sendto(bytes(msg.get_message(), 'utf-8'), (address, PORT))
@@ -133,7 +136,7 @@ class Network:
             return None
 
     def get_neighbor(self):
-        ring = sorted(self.peers, key=lambda x: x.uid)
+        ring = sorted(self.peers + [self.uid])
         return ring[ring.index(self.uid) - 1]
         
         
