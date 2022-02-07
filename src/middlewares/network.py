@@ -1,6 +1,7 @@
+from ssl import SOL_SOCKET
 from threading import Thread
 from collections import defaultdict, deque
-from socket import socket, gethostbyname, gethostname, AF_INET, SOCK_STREAM, SOCK_DGRAM
+from socket import SO_BROADCAST, socket, gethostbyname, gethostname, AF_INET, SOCK_STREAM, SOCK_DGRAM
 from socketserver import ThreadingUDPServer, ThreadingTCPServer, BaseRequestHandler
 from ..constants import PORT, Headers
 import json
@@ -52,30 +53,28 @@ class Network:
             with socket(AF_INET, SOCK_STREAM) as sock:
                 sock.connect((msg.address, PORT))
                 sock.sendall(bytes(msg.get_message(), 'utf-8'))
-        except Exception:
-            pass
+        except Exception as ex:
+            print(ex)
             
     def multicast(self, msg):
-        # send a request to the leader with MULTICAST header.
-        # Looking for total ordering. BC only that makes sense.
         self.clock += 1
         self.rebuild_message(msg)
-        self.unicast(msg.get_message(), (msg.address, PORT))
+        # TODO: What the heck is this? you're supposed to do leader unicast.
+        self.ip_multicast(msg.get_message(), (msg.address, PORT))
 
-    def ip_multicast(self, msg, group_address):
-        # do some message formatting.
+    def ip_multicast(self, msg):
         with socket(AF_INET, SOCK_DGRAM) as sock:
-            sock.sendto(bytes(msg.get_message(), 'utf-8'), group_address)
-        pass
+            sock.sendto(bytes(msg.get_message(), 'utf-8'), (msg.address, PORT))
 
     def broadcast(self, msg):
         self.clock += 1
         msg = self.rebuild_message(msg)
 
         broken_ip = self.address[0].split('.')
-        address = broken_ip[0] + broken_ip[1] + '.255.255'
+        address = f'{broken_ip[0]}.{broken_ip[1]}.255.255'
 
         with socket(AF_INET, SOCK_DGRAM) as sock:
+            sock.setsockopt(SOL_SOCKET, SO_BROADCAST, 1)
             sock.sendto(bytes(msg.get_message(), 'utf-8'), (address, PORT))
 
     def rebuild_message(self, msg):
