@@ -39,7 +39,7 @@ class Node:
         self.announce_presence()
 
         # Start election.
-        self.initiate_election()
+        # self.initiate_election()
 
         # Depends on the {role} varialbe.
         self.perform_role()
@@ -99,6 +99,9 @@ class Node:
 
         elif request.header == Headers.PRESENCE_BROADCAST:
             self.network.unicast(Message(Headers.PRESENCE_ACK, {}, request.client_address))
+
+        elif request.header == Headers.MSG_MISSING:
+            self.network.unicast(Message(Headers.DATA_EXCHANGE, {}, request.client_address))
 
         else:
             print(f'Request with invalid header: {request.header} received!')

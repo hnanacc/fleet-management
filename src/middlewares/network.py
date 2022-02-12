@@ -103,6 +103,11 @@ class Network:
 
         def compare_and_push(request):
             print('cap:', request.clock, self.last_seq[request.client_address], request.client_address)
+            print('dec:', self.last_seq[request.client_address] + 1 == request.clock)
+
+            self.request_queue.append(request)
+            return
+
             if self.last_seq[request.client_address] + 1 == request.clock:
                 self.request_queue.append(request)
                 self.last_seq[request.client_address] += 1
