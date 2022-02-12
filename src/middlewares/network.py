@@ -17,7 +17,7 @@ class Request:
         self.client_address = address
 
     def __repr__(self):
-        return f'(clock: {self.clock}, header: {self.header}, data: {self.data}'
+        return f'(clock: {self.clock}, header: {self.header}, data: {self.data})'
 
 class Message:
     def __init__(self, header, data, address):
@@ -54,16 +54,18 @@ class Network:
 
     def unicast(self, msg):
 
-        print(msg.address, self.address[0])
+        print(msg.address)
+
+        self.clock += 1
         if msg.address == self.address[0]:
             return
 
-        self.clock += 1
         self.rebuild_message(msg)
         # try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.connect((msg.address, PORT))
             sock.sendall(bytes(msg.get_message(), 'utf-8'))
+            print('done here')
         # except Exception as ex:
             # print(ex)
             
@@ -100,7 +102,8 @@ class Network:
             raise Exception('Unexpected network behaviour.')
 
         def compare_and_push(request):
-            if request.clock == self.last_seq[request.client_address] + 1:
+            print('cap:', request.clock, self.last_seq[request.client_address], request.client_address)
+            if self.last_seq[request.client_address] + 1 == request.clock:
                 self.request_queue.append(request)
                 self.last_seq[request.client_address] += 1
 
@@ -108,7 +111,7 @@ class Network:
                 self.hold_back_queue[request.client_address].clear()
 
                 for req in req_list:
-                    if req.clock == self.last_seq[request.client_address] + 1:
+                    if self.last_seq[request.client_address] + 1 == req.clock:
                         self.request_queue.append(req)
                         self.last_seq[request.client_address] += 1
                     else:
@@ -127,14 +130,14 @@ class Network:
                 request, address = sock.recvfrom(8192)
                 request = Request(request, address[0])
 
-                self.peers.append(self.get_uid(request.client_address))
+                self.peers.append(request.client_address)
                 self.peers = list(set(self.peers))
 
                 compare_and_push(request)
 
         class RequestHandler(socketserver.BaseRequestHandler):
             def handle(this):
-                self.peers.append(self.get_uid(this.client_address[0]))
+                self.peers.append(this.client_address[0])
                 self.peers = list(set(self.peers))
 
                 request = Request(this.request.recv(8192), this.client_address[0])
@@ -155,8 +158,9 @@ class Network:
             return None
 
     def get_neighbor(self):
-        ring = sorted(self.peers + [self.uid])
-        return ring[ring.index(self.uid) - 1]
+        print(self.peers)
+        ring = sorted(self.peers, key=lambda x: self.get_uid(x))
+        return ring[ring.index(self.address[0]) - 1]
 
     def get_peers(self):
         return self.peers

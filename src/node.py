@@ -39,7 +39,7 @@ class Node:
         self.announce_presence()
 
         # Start election.
-        # self.initiate_election()
+        self.initiate_election()
 
         # Depends on the {role} varialbe.
         self.perform_role()
@@ -104,9 +104,10 @@ class Node:
             print(f'Request with invalid header: {request.header} received!')
 
     def initiate_election(self):
+        print('Initiate election')
         neighbor = self.network.get_neighbor()
         message = Message(Headers.LEADER_ELECTION, {}, neighbor)
-        message.data.uid = self.uid
+        message.data['uid'] = self.uid
         self.network.unicast(message)
 
     def resolve_election(self, request):  
@@ -120,8 +121,8 @@ class Node:
             self.network.unicast(new_message)
 
         if pb_uid < self.uid and not self.participant:
-            new_message.data.uid = self.uid
-            new_message.data.isLeader = False
+            new_message.data['uid'] = self.uid
+            new_message.data['isLeader'] = False
             self.participant = True
 
             self.network.unicast(new_message)
@@ -134,8 +135,8 @@ class Node:
             self.leader_uid = self.uid
             self.role = Roles.LEADER
             
-            new_message.data.uid = self.uid
-            new_message.data.isLeader = True
+            new_message.data['uid'] = self.uid
+            new_message.data['uid'] = True
             self.participant = False
 
             self.network.unicast(new_message)
