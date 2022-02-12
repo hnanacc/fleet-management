@@ -11,7 +11,7 @@ class Headers(str, Enum):
     DATA_EXCHANGE = 'DATA_EXCHANGE'             # For sharing state with leader.
     
     GROUP_UPDATE = 'GROUP_UPDATE'               # Multicast messages sent by leader.
-    MULTICAST_ONBEHALF = 'MULTICAST_ONBEHALF'   # Multicast request to leader.
+    MSG_MISSING = 'MSG_MISSING'                 # Negative ack when message missing.
 
     PRESENCE_BROADCAST = 'PRESENCE_BROADCAST'   # Initial broadcast to show presence.
 

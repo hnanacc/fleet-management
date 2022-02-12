@@ -14,7 +14,6 @@ class Node:
     participant = False
     leader_uid = None
     uid = None
-    ring = None
 
     leader_strategies = None
 
@@ -40,13 +39,13 @@ class Node:
         self.announce_presence()
 
         # Start election.
-        self.initiate_election()
+        # self.initiate_election()
 
         # Depends on the {role} varialbe.
         self.perform_role()
 
     def announce_presence(self):
-        message = Message(Headers.PRESENCE_ACK, '', '')
+        message = Message(Headers.PRESENCE_BROADCAST, {}, '')
         self.network.broadcast(message)
     
     def perform_role(self):
@@ -55,15 +54,16 @@ class Node:
 
         while True:
 
-            self._attempt_fault_with_probability(0.5)
-            self.update_state('data', self.data_source.fetch_data())
+            # self._attempt_fault_with_probability(0.5)
+            # self.update_state('data', self.data_source.fetch_data())
 
+            print('Peers list:', self.network.get_peers())
             time.sleep(1)
 
             request = self.network.get_request()
             
             if request is not None:
-                print(request.raw, request.client_address)
+                print(request)
 
             self.process_request(request) # generic.
 
@@ -89,11 +89,6 @@ class Node:
             
             self.update_state(request.data)
 
-        elif request.header == Headers.MULTICAST_ONBEHALF:
-            request.data.global_id = self.global_counter
-            new_message = Message(Headers.GROUP_UPDATE, request.data, request.mc_address)
-            self.network.multicast(new_message)
-            self.global_counter += 1 # total order
 
         elif request.header == Headers.GROUP_UPDATE:
             # TODO: What is the update_state function.
@@ -103,20 +98,21 @@ class Node:
             pass
 
         elif request.header == Headers.PRESENCE_BROADCAST:
-            self.unicast(Message(Headers.PRESENCE_ACK, '', request.client_address))
+            self.network.unicast(Message(Headers.PRESENCE_ACK, {}, request.client_address))
 
         else:
             print(f'Request with invalid header: {request.header} received!')
 
     def initiate_election(self):
         neighbor = self.network.get_neighbor()
-        message = Message(Headers.LEADER_ELECTION, self.uid, neighbor)
+        message = Message(Headers.LEADER_ELECTION, {}, neighbor)
+        message.data.uid = self.uid
         self.network.unicast(message)
 
     def resolve_election(self, request):  
         neighbor = self.network.get_neighbor()
-        new_message = Message(Headers.LEADER_ELECTION, '', neighbor)
-        pb_uid = int(request.data)
+        new_message = Message(Headers.LEADER_ELECTION, {}, neighbor)
+        pb_uid = int(request.data.uid)
 
         if request.isLeader:
             self.leader_uid = pb_uid 
@@ -124,8 +120,8 @@ class Node:
             self.network.unicast(new_message)
 
         if pb_uid < self.uid and not self.participant:
-            new_message.data = self.uid
-            new_message.isLeader = False
+            new_message.data.uid = self.uid
+            new_message.data.isLeader = False
             self.participant = True
 
             self.network.unicast(new_message)
@@ -138,8 +134,8 @@ class Node:
             self.leader_uid = self.uid
             self.role = Roles.LEADER
             
-            new_message.data = self.uid
-            new_message.isLeader = True
+            new_message.data.uid = self.uid
+            new_message.data.isLeader = True
             self.participant = False
 
             self.network.unicast(new_message)
