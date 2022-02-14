@@ -5,7 +5,6 @@ import socketserver
 from ..constants import PORT, Headers, Roles
 import json
 
-
 class Request:
     def __init__(self, message, address):
         message = json.loads(message)
@@ -55,19 +54,18 @@ class Network:
         self._start_servers()
         self.host = self.address[0]
         self.uid = self.get_uid(self.host)
+        self.peers.append(self.host)
 
     def initiate_election(self):
-        print('Initiate election')
         neighbor = self.get_neighbor()
-        print(neighbor)
         message = Message(Headers.LEADER_ELECTION, {}, neighbor)
         message.data['uid'] = self.uid
         message.data['leader_address'] = self.host
         message.data['isLeader'] = (self.uid == self.leader_uid)
         self.unicast(message)
+        print('Election Initiated...')
 
     def resolve_election(self, request):
-        print('[INTO RESOLVE ELECTION]')
         neighbor = self.get_neighbor()
         new_message = Message(Headers.LEADER_ELECTION, {}, neighbor)
         pb_uid = int(request.data['uid'])
@@ -126,8 +124,9 @@ class Network:
                 self.initiate_election()
                 
     def multicast(self, msg):
-        self.group_clock += 1
-        msg.data['group_clock'] = self.group_clock
+        if msg.data.get('group_clock') is None:
+            self.group_clock += 1
+            msg.data['group_clock'] = self.group_clock
 
         broken_ip = self.address[0].split('.')
         address = f'{broken_ip[0]}.{broken_ip[1]}.255.255'
@@ -167,7 +166,7 @@ class Network:
                             self.request_queue.append(req)
                             self.last_seq[request.client_address] += 1
                         else:
-                            self.hold_back_queue.append(req)
+                            self.hold_back_queue[request.client_address].append(req)
                             neg_ack = Message(Headers.MSG_MISSING, { 'missed': self.last_seq[request.client_address] + 1 }, request.client_address)
                             self.unicast(neg_ack)
                 elif self.last_seq[request.client_address] < request.data['group_clock']:
@@ -216,7 +215,7 @@ class Network:
             return None
 
     def get_neighbor(self):
-        ring = sorted(set(self.peers + [self.host]), key=lambda x: self.get_uid(x))
+        ring = sorted(self.peers, key=lambda x: self.get_uid(x))
         return ring[ring.index(self.address[0]) - 1]
 
     def get_peers(self):

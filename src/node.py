@@ -2,6 +2,7 @@ import time
 import random
 from .constants import Roles, Headers
 from .middlewares.network import Message
+from collections import defaultdict
 
 class Node:
     """Docstring
@@ -9,10 +10,9 @@ class Node:
 
     state = {
         'data': [],
+        'group_events': []
     }
-    uid = None
     group_events = dict()
-
     leader_strategies = None
 
     def __init__(self,
@@ -48,56 +48,64 @@ class Node:
         self.network.broadcast(message)
     
     def perform_role(self):
-        """Docstring
+        """Performs the functions based on the current role.
         """
 
         while True:
 
-            self._attempt_fault_with_probability(0.5)
-            # self.update_state('data', self.data_source.fetch_data())
-
-            print(f'[Current Leader] {self.network.get_leader_uid()}')
+            self.update_state('data', self.data_source.fetch_data())
 
             time.sleep(1)
 
             request = self.network.get_request()
 
-            # if self.network.get_leader_uid() is None:
-                # self.network.initiate_election()
-
             if self.network.get_leader_uid() and self.network.get_leader_uid() != self.network.uid:
-                self.network.unicast(Message(Headers.DATA_EXCHANGE, { 'ui': 'ui' }, self.network.get_leader_address()))
-            
-            if request is not None:
-                print('From node:', request)
+                self.network.unicast(Message(Headers.DATA_EXCHANGE, self.state['data'][-1], self.network.get_leader_address()))
 
-            self.process_request(request) # generic.
+            # Send random multicast messages.
+            if random.random() > 0.95:
+                self.network.multicast(Message(Headers.GROUP_UPDATE, { 'random': 'event' }, ''))
+
+            # Create the multicast sequence.
+            mc_seq = defaultdict(list)
+            for ev in self.state['group_events']:
+                mc_seq[ev.client_address].append(str(ev.data['group_clock']))
+
+            mc_list = []
+            for client in mc_seq:
+                mc_list.append(f'{client}:({", ".join(mc_seq[client])})')
+
+            # Print the status.
+            print('\n---\n')
+            print(f'[ IP Address      ]: {self.network.host}')
+            print(f'[ Peers List      ]: {self.network.get_peers()}')
+            print(f'[ Current Leader  ]: {self.network.get_leader_address()}')
+            print(f'[ Current Request ]: {request}')
+            print(f'[ Multicast Seq   ]: {" ".join(mc_list)}')
+            
+            self.process_request(request)
 
             if self.network.get_role() == Roles.LEADER:
                 self.leader_strategies.remote_sync()
 
 
     def update_state(self, key, new_state):
-        print(f'Got a new state {new_state} at {key}')
+        self.state[key].append(new_state)
 
     def process_request(self, request):
         if request is None:
             return
         
         if request.header == Headers.LEADER_ELECTION:
-            print(f'[Leader Election] {request}')
             if self.network.get_leader_uid() is None:
                 self.network.resolve_election(request)
-                print(f'[Elected] {self.network.get_leader_uid()}!!')
 
         elif request.header == Headers.DATA_EXCHANGE:
             if self.network.get_role() != Roles.LEADER:
                 return
             
-            print(request)
-
         elif request.header == Headers.GROUP_UPDATE:
-            print(f'[Multicast Event] {request}')
+            self.update_state('group_events', request)
 
         elif request.header == Headers.PRESENCE_ACK:
             if request.data['leader_uid'] is not None:
@@ -111,8 +119,10 @@ class Node:
             }, request.client_address))
 
         elif request.header == Headers.MSG_MISSING:
-            # self.network.unicast(Message(Headers.DATA_EXCHANGE, {}, request.client_address))
-            pass
+            for msg in self.state['group_events']:
+                if msg.client_address == self.network.host and msg.data['group_clock'] == request.data['missed']:
+                    new_message = Message(Headers.GROUP_UPDATE, msg.data, '')
+                    self.network.multicast(new_message)
 
         else:
             print(f'Request with invalid header: {request.header} received!')

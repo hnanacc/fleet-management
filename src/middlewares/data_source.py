@@ -1,7 +1,9 @@
 from collections import deque
+import random
 
 class DataSource:
     _data_queue = deque()
+    data_id = 0
 
     def generate_data(self):
         # 1. Run this in a thread
@@ -10,16 +12,6 @@ class DataSource:
         pass
 
     def fetch_data(self):
-
-        data = list(self._data_queue)
-        self._data_queue.clear()
-
-        # return data
-
-        # For test purposes.
-        return [
-            {
-                "id": "1234",
-                "value": "CPU:89;RAM:37;NET:18"
-            }
-        ]
+        # Supposed to get the data from data_queue.
+        self.data_id += 1
+        return { 'id': self.data_id, 'sensor': random.randint(100, 1000) }
