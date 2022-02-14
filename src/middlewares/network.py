@@ -2,7 +2,7 @@ from threading import Thread
 from collections import defaultdict, deque
 import socket
 import socketserver
-from ..constants import PORT, Headers
+from ..constants import PORT, Headers, Roles
 import json
 
 
@@ -40,7 +40,13 @@ class Network:
     hold_back_queue = defaultdict(list)
     last_seq = defaultdict(lambda: 0)
     group_clock = 0
+    
     is_connected = False
+
+    leader_uid = None
+    leader_address = None
+    role = Roles.FOLLOWER
+    participant = False
 
     def __init__(self, address=(socket.gethostbyname(socket.gethostname()), PORT)):
         self.address = address
@@ -50,14 +56,75 @@ class Network:
         self.host = self.address[0]
         self.uid = self.get_uid(self.host)
 
+    def initiate_election(self):
+        print('Initiate election')
+        neighbor = self.get_neighbor()
+        print(neighbor)
+        message = Message(Headers.LEADER_ELECTION, {}, neighbor)
+        message.data['uid'] = self.uid
+        message.data['leader_address'] = self.host
+        message.data['isLeader'] = (self.uid == self.leader_uid)
+        self.unicast(message)
+
+    def resolve_election(self, request):
+        print('[INTO RESOLVE ELECTION]')
+        neighbor = self.get_neighbor()
+        new_message = Message(Headers.LEADER_ELECTION, {}, neighbor)
+        pb_uid = int(request.data['uid'])
+
+        if request.data['isLeader']:
+            new_message.data['uid'] = request.data['uid']
+            new_message.data['isLeader'] = request.data['isLeader']
+            new_message.data['leader_address'] = request.data['leader_address']
+
+            self.leader_uid = pb_uid
+            self.leader_address = request.data['leader_address']
+            self.participant = False
+            self.unicast(new_message)
+    
+        elif pb_uid < self.uid and not self.participant:
+            new_message.data['uid'] = self.uid
+            new_message.data['isLeader'] = False
+            new_message.data['leader_address'] = request.data['leader_address']
+
+            self.participant = True
+            self.unicast(new_message)
+
+        elif pb_uid > self.uid:
+            new_message.data['uid'] = request.data['uid']
+            new_message.data['isLeader'] = request.data['isLeader']
+            new_message.data['leader_address'] = request.data['leader_address']
+
+            self.participant = True
+            self.unicast(new_message)
+    
+        elif pb_uid == self.uid:
+            new_message.data['uid'] = self.uid
+            new_message.data['isLeader'] = True
+            new_message.data['leader_address'] = self.host
+
+            self.leader_uid = self.uid
+            self.leader_address = self.host
+            self.role = Roles.LEADER
+            self.participant = False
+
+            self.unicast(new_message)
+
     def unicast(self, msg):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(1)
                 sock.connect((msg.address, PORT))
                 sock.sendall(bytes(msg.get_message(), 'utf-8'))
-        except Exception as ex:
-            print(ex)
+        except socket.error as ex:
+            if msg.address in self.peers and msg.address != self.host:
+                    self.peers.remove(msg.address)
             
+            if self.get_uid(msg.address) == self.leader_uid and not self.participant:
+                self.leader_uid = None
+                self.leader_address = None
+                self.initiate_election()
+                
     def multicast(self, msg):
         self.group_clock += 1
         msg.data['group_clock'] = self.group_clock
@@ -125,8 +192,6 @@ class Network:
                 self.peers.append(request.client_address)
                 self.peers = list(set(self.peers))
 
-                print('About to invoke')
-
                 compare_and_push(request)
 
         class RequestHandler(socketserver.BaseRequestHandler):
@@ -151,8 +216,7 @@ class Network:
             return None
 
     def get_neighbor(self):
-        print(self.peers)
-        ring = sorted(self.peers, key=lambda x: self.get_uid(x))
+        ring = sorted(set(self.peers + [self.host]), key=lambda x: self.get_uid(x))
         return ring[ring.index(self.address[0]) - 1]
 
     def get_peers(self):
@@ -160,6 +224,21 @@ class Network:
 
     def get_uid(self, address):
         return int(''.join(address.split('.')))
+
+    def get_leader_uid(self):
+        return self.leader_uid
+    
+    def set_leader_uid(self, uid):
+        self.leader_uid = uid
+
+    def get_leader_address(self):
+        return self.leader_address
+
+    def set_leader_address(self, leader_address):
+        self.leader_address = leader_address
+
+    def get_role(self):
+        return self.role
         
     def disconnect(self):
         self.tcp_server.shutdown()
